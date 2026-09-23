@@ -109,8 +109,8 @@ async function getRedirectNotice(tabId, currentUrl) {
   return {
     originalLabel: record.originalLabel,
     alternateLabel: record.alternateLabel,
-    actionLabel: 'Use original',
-    actionAriaLabel: `Use ${record.originalLabel} in this tab`,
+    actionLabel: record.kind === 'archive' ? 'Go to original' : `Go to ${record.originalLabel}`,
+    actionAriaLabel: `Go to ${record.originalLabel} in this tab`,
   };
 }
 

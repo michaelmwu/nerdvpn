@@ -14,7 +14,7 @@ Chrome extension that redirects visits to specific domains:
    - Toggle **Developer mode**.
    - Click **Load unpacked** and choose the repository root.
 3. Navigate to `x.com`, `reddit.com`, or supported paywalled news sites; you will be redirected automatically (paths, queries, and fragments are preserved).
-4. The alternate site shows a small NerdVPN notice for one minute (pausing while hovered or focused). Choose **Use original** to bypass that redirect until you close the tab, without changing any other tab.
+4. The alternate site shows a small NerdVPN notice for one minute (pausing while hovered or focused). Choose the **Go to …** button to bypass that redirect until you close the tab, without changing any other tab.
 5. To toggle redirects, open the background page at `chrome-extension://<extension-id>/background.html` (copy the extension ID from `chrome://extensions`) and use the checkboxes for X, Reddit, and archive.is redirects. Add more paywalled sites to the archive.is behavior using the textbox in the popup.
 
 Tested - 9/23/26.

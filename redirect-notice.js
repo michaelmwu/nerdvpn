@@ -206,7 +206,7 @@
     summary.setAttribute(
       'aria-label',
       `${notice.originalLabel} was redirected to ${notice.alternateLabel} by NerdVPN. `
-        + `Use original to open ${notice.originalLabel} in this tab.`,
+        + `You can return to ${notice.originalLabel} in this tab.`,
     );
 
     const action = document.createElement('button');

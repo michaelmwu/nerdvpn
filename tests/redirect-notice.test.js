@@ -66,8 +66,8 @@ test('renders a 60-second toast and dismisses it when its lifetime ends', async 
             notice: {
               originalLabel: 'X',
               alternateLabel: 'Nitter',
-              actionLabel: 'Use original',
-              actionAriaLabel: 'Use X in this tab',
+              actionLabel: 'Go to X',
+              actionAriaLabel: 'Go to X in this tab',
             },
           }
           : { ok: true });
@@ -88,11 +88,11 @@ test('renders a 60-second toast and dismisses it when its lifetime ends', async 
   const region = host.shadowRoot.children[1];
   const summary = region.children[0];
   const action = region.children[1];
-  assert.equal(action.textContent, 'Use original');
-  assert.equal(action.getAttribute('aria-label'), 'Use X in this tab');
+  assert.equal(action.textContent, 'Go to X');
+  assert.equal(action.getAttribute('aria-label'), 'Go to X in this tab');
   assert.equal(
     summary.getAttribute('aria-label'),
-    'X was redirected to Nitter by NerdVPN. Use original to open X in this tab.',
+    'X was redirected to Nitter by NerdVPN. You can return to X in this tab.',
   );
 
   host.listeners.get('animationend')({
