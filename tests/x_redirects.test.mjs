@@ -65,6 +65,14 @@ test('X history-state navigations redirect to nitter.cf', async () => {
     });
 
     listener({
+      frameId: 1,
+      tabId: 42,
+      url: 'https://x.com/embedded/status/2098049270553383031?s=46',
+    });
+
+    assert.equal(updateCall, undefined);
+
+    listener({
       frameId: 0,
       tabId: 42,
       url: 'https://x.com/eglyman/status/2098049270553383031?s=46',
