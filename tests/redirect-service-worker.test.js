@@ -92,7 +92,8 @@ test('tracks a committed redirect, bypasses it in one tab, and cleans up on clos
     notice: {
       originalLabel: 'X',
       alternateLabel: 'Nitter',
-      actionLabel: 'Use X in this tab',
+      actionLabel: 'Use original',
+      actionAriaLabel: 'Use X in this tab',
     },
   });
 

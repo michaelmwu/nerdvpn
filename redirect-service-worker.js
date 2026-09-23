@@ -109,7 +109,8 @@ async function getRedirectNotice(tabId, currentUrl) {
   return {
     originalLabel: record.originalLabel,
     alternateLabel: record.alternateLabel,
-    actionLabel: `Use ${record.originalLabel} in this tab`,
+    actionLabel: 'Use original',
+    actionAriaLabel: `Use ${record.originalLabel} in this tab`,
   };
 }
 
