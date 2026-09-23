@@ -1,15 +1,20 @@
 {
   "manifest_version": 3,
   "name": "NerdVPN",
-  "version": "1.1.0",
+  "version": "1.2.0",
+  "minimum_chrome_version": "102",
   "description": "Redirects visits to X, Reddit, and paywalled news sites to alternative domains.",
+  "background": {
+    "service_worker": "redirect-service-worker.js"
+  },
   "action": {
     "default_popup": "background.html",
     "default_title": "NerdVPN redirects"
   },
   "permissions": [
     "declarativeNetRequest",
-    "storage"
+    "storage",
+    "webNavigation"
   ],
   "host_permissions": [
     "*://*/*"
@@ -32,5 +37,16 @@
         "path": "rules/paywall_archive_redirects.json"
       }
     ]
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://nitter.cf/*",
+        "https://reddit.nerdvpn.de/*",
+        "https://archive.is/*"
+      ],
+      "js": ["redirect-notice.js"],
+      "run_at": "document_idle"
+    }
+  ]
 }
