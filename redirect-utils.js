@@ -19,6 +19,15 @@
   ];
 
   const ARCHIVE_DOMAIN = 'archive.is';
+  const DEFAULT_PAYWALL_SITES = Object.freeze([
+    'nytimes.com',
+    'washingtonpost.com',
+    'wsj.com',
+    'ft.com',
+    'economist.com',
+    'bloomberg.com',
+    'wired.com',
+  ]);
   const BYPASS_RULE_PRIORITY = 100;
   const MAX_RULE_ID = 2_147_483_647;
 
@@ -111,6 +120,18 @@
     return currentOriginal.href;
   }
 
+  function paywallSiteForHost(hostname, customSites = []) {
+    const host = hostname.toLowerCase().replace(/^www\./, '');
+    const configuredSites = [...DEFAULT_PAYWALL_SITES, ...customSites]
+      .filter((site) => typeof site === 'string')
+      .map((site) => site.toLowerCase());
+
+    // A parent site covers its newsletter and article subdomains in the same tab.
+    return configuredSites
+      .filter((site) => host === site || host.endsWith(`.${site}`))
+      .sort((a, b) => a.length - b.length)[0] ?? host;
+  }
+
   function bypassRuleIdForTab(tabId) {
     if (!Number.isInteger(tabId) || tabId < 0 || tabId > MAX_RULE_ID) {
       throw new TypeError('A valid tab ID is required.');
@@ -142,10 +163,12 @@
   }
 
   globalThis.NerdVpnRedirects = Object.freeze({
+    DEFAULT_PAYWALL_SITES,
     buildBypassRule,
     bypassRuleIdForTab,
     destinationMatches,
     matchRedirect,
     originalUrlForDestination,
+    paywallSiteForHost,
   });
 })();

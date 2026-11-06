@@ -6,15 +6,7 @@ const RULESET_IDS = {
 
 const DYNAMIC_RULE_ID_START = 10000;
 const STORAGE_KEY_PAYWALL_HOSTS = 'userPaywallHosts';
-const DEFAULT_PAYWALL_SITES = [
-  'nytimes.com',
-  'washingtonpost.com',
-  'wsj.com',
-  'ft.com',
-  'economist.com',
-  'bloomberg.com',
-  'wired.com',
-];
+const { DEFAULT_PAYWALL_SITES } = globalThis.NerdVpnRedirects;
 
 const checkboxX = document.getElementById('toggle-x');
 const checkboxReddit = document.getElementById('toggle-reddit');

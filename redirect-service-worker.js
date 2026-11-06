@@ -6,10 +6,26 @@ const {
   destinationMatches,
   matchRedirect,
   originalUrlForDestination,
+  paywallSiteForHost,
 } = globalThis.NerdVpnRedirects;
 
 const ACTIVE_REDIRECT_KEY_PREFIX = 'activeRedirect:';
 const REDIRECT_WINDOW_MS = 15_000;
+const REDIRECT_ERROR_PAGE_URL = chrome.runtime.getURL('redirect-error.html');
+const RECOVERABLE_NAVIGATION_ERRORS = new Set([
+  'net::ERR_ADDRESS_UNREACHABLE',
+  'net::ERR_CONNECTION_CLOSED',
+  'net::ERR_CONNECTION_REFUSED',
+  'net::ERR_CONNECTION_RESET',
+  'net::ERR_CONNECTION_TIMED_OUT',
+  'net::ERR_EMPTY_RESPONSE',
+  'net::ERR_NAME_NOT_RESOLVED',
+  'net::ERR_TIMED_OUT',
+]);
+const TIMEOUT_NAVIGATION_ERRORS = new Set([
+  'net::ERR_CONNECTION_TIMED_OUT',
+  'net::ERR_TIMED_OUT',
+]);
 
 const pendingNavigations = new Map();
 const activeRedirects = new Map();
@@ -20,6 +36,14 @@ function activeRedirectKey(tabId) {
 
 function isMainFrameNavigation(details) {
   return details.frameId === 0 && Number.isInteger(details.tabId) && details.tabId >= 0;
+}
+
+function isRedirectErrorPage(value) {
+  return value === REDIRECT_ERROR_PAGE_URL;
+}
+
+function originalActionLabel(record) {
+  return record.kind === 'archive' ? 'Go to original' : `Go to ${record.originalLabel}`;
 }
 
 async function storeActiveRedirect(tabId, record) {
@@ -95,7 +119,8 @@ async function finishNavigation(details) {
   }
 
   const record = await getActiveRedirect(details.tabId);
-  if (record && !destinationMatches(record, details.url)) {
+  const isActiveRecoveryPage = record?.failure && isRedirectErrorPage(details.url);
+  if (record && !destinationMatches(record, details.url) && !isActiveRecoveryPage) {
     await clearActiveRedirect(details.tabId);
   }
 }
@@ -109,18 +134,29 @@ async function getRedirectNotice(tabId, currentUrl) {
   return {
     originalLabel: record.originalLabel,
     alternateLabel: record.alternateLabel,
-    actionLabel: record.kind === 'archive' ? 'Go to original' : `Go to ${record.originalLabel}`,
+    actionLabel: originalActionLabel(record),
     actionAriaLabel: `Go to ${record.originalLabel} in this tab`,
   };
 }
 
-async function bypassRedirect(tabId, currentUrl) {
-  const record = await getActiveRedirect(tabId);
-  if (!record || !destinationMatches(record, currentUrl)) {
-    throw new Error('This redirect is no longer active.');
+async function archiveBypassDomain(record) {
+  const originalHost = new URL(record.originalUrl).hostname;
+  let customSites = [];
+
+  try {
+    const stored = await chrome.storage.sync.get('userPaywallHosts');
+    if (Array.isArray(stored.userPaywallHosts)) {
+      customSites = stored.userPaywallHosts;
+    }
+  } catch (error) {
+    console.warn('NerdVPN could not read custom paywall sites.', error);
   }
 
-  const originalUrl = originalUrlForDestination(record, currentUrl);
+  return paywallSiteForHost(originalHost, customSites);
+}
+
+async function openOriginalInTab(tabId, record, destinationUrl) {
+  const originalUrl = originalUrlForDestination(record, destinationUrl);
   if (!originalUrl) {
     throw new Error('NerdVPN could not determine the original page.');
   }
@@ -129,7 +165,10 @@ async function bypassRedirect(tabId, currentUrl) {
   const sessionRules = await chrome.declarativeNetRequest.getSessionRules();
   const existingRule = sessionRules.find((rule) => rule.id === ruleId);
   const existingDomains = existingRule?.condition?.requestDomains ?? [];
-  const bypassRule = buildBypassRule(tabId, record.allowDomains, existingDomains);
+  const allowDomains = record.kind === 'archive'
+    ? [await archiveBypassDomain(record)]
+    : record.allowDomains;
+  const bypassRule = buildBypassRule(tabId, allowDomains, existingDomains);
 
   await chrome.declarativeNetRequest.updateSessionRules({
     removeRuleIds: [ruleId],
@@ -137,6 +176,98 @@ async function bypassRedirect(tabId, currentUrl) {
   });
   await chrome.tabs.update(tabId, { url: originalUrl });
   await clearActiveRedirect(tabId);
+}
+
+async function bypassRedirect(tabId, currentUrl) {
+  const record = await getActiveRedirect(tabId);
+  if (!record || !destinationMatches(record, currentUrl)) {
+    throw new Error('This redirect is no longer active.');
+  }
+
+  await openOriginalInTab(tabId, record, currentUrl);
+}
+
+function failureDescription(record) {
+  const failedUrl = new URL(record.failure.destinationUrl);
+  if (TIMEOUT_NAVIGATION_ERRORS.has(record.failure.error)) {
+    return `${failedUrl.hostname} took too long to respond.`;
+  }
+  if (record.failure.error === 'net::ERR_NAME_NOT_RESOLVED') {
+    return `${failedUrl.hostname} couldn’t be found.`;
+  }
+  return `${failedUrl.hostname} didn’t respond.`;
+}
+
+async function getRedirectFailure(tabId, currentUrl) {
+  const record = await getActiveRedirect(tabId);
+  if (!record?.failure || !isRedirectErrorPage(currentUrl)) {
+    return null;
+  }
+
+  const scopeName = record.kind === 'archive'
+    ? await archiveBypassDomain(record)
+    : record.originalLabel;
+
+  return {
+    title: `${record.alternateLabel} didn’t respond`,
+    description: failureDescription(record),
+    actionLabel: originalActionLabel(record),
+    actionAriaLabel: `Go to ${record.originalLabel} in this tab`,
+    retryLabel: 'Try again',
+    retryAriaLabel: `Try ${record.alternateLabel} again`,
+    scopeLabel: `This tab will use ${scopeName} until you close it.`,
+  };
+}
+
+async function bypassFailedRedirect(tabId, currentUrl) {
+  const record = await getActiveRedirect(tabId);
+  if (!record?.failure || !isRedirectErrorPage(currentUrl)) {
+    throw new Error('This failed redirect is no longer active.');
+  }
+
+  await openOriginalInTab(tabId, record, record.failure.destinationUrl);
+}
+
+async function retryFailedRedirect(tabId, currentUrl) {
+  const record = await getActiveRedirect(tabId);
+  if (!record?.failure || !isRedirectErrorPage(currentUrl)) {
+    throw new Error('This failed redirect is no longer active.');
+  }
+
+  const retryUrl = record.failure.destinationUrl;
+  const { failure: _failure, ...pendingRecord } = record;
+  await storeActiveRedirect(tabId, pendingRecord);
+
+  try {
+    await chrome.tabs.update(tabId, { url: retryUrl });
+  } catch (error) {
+    await storeActiveRedirect(tabId, record);
+    throw error;
+  }
+}
+
+async function handleNavigationError(details) {
+  if (!isMainFrameNavigation(details)
+    || !RECOVERABLE_NAVIGATION_ERRORS.has(details.error)) {
+    return;
+  }
+
+  const record = await getActiveRedirect(details.tabId);
+  if (!record || !destinationMatches(record, details.url)) {
+    return;
+  }
+
+  pendingNavigations.delete(details.tabId);
+  await storeActiveRedirect(details.tabId, {
+    ...record,
+    destinationUrl: details.url,
+    failure: {
+      destinationUrl: details.url,
+      error: details.error,
+      detectedAt: Date.now(),
+    },
+  });
+  await chrome.tabs.update(details.tabId, { url: REDIRECT_ERROR_PAGE_URL });
 }
 
 async function cleanUpTab(tabId) {
@@ -155,6 +286,11 @@ chrome.webNavigation.onCommitted.addListener((details) => {
     console.warn('NerdVPN could not update redirect state.', error);
   });
 });
+chrome.webNavigation.onErrorOccurred.addListener((details) => {
+  void handleNavigationError(details).catch((error) => {
+    console.warn('NerdVPN could not show redirect recovery.', error);
+  });
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const tabId = sender.tab?.id;
@@ -171,6 +307,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === 'dismissRedirectNotice') {
     clearActiveRedirect(tabId)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ error: error.message }));
+    return true;
+  }
+
+  if (message?.type === 'getRedirectFailure') {
+    getRedirectFailure(tabId, message.currentUrl)
+      .then((failure) => sendResponse({ failure }))
+      .catch((error) => sendResponse({ error: error.message }));
+    return true;
+  }
+
+  if (message?.type === 'bypassFailedRedirect') {
+    bypassFailedRedirect(tabId, message.currentUrl)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ error: error.message }));
+    return true;
+  }
+
+  if (message?.type === 'retryFailedRedirect') {
+    retryFailedRedirect(tabId, message.currentUrl)
       .then(() => sendResponse({ ok: true }))
       .catch((error) => sendResponse({ error: error.message }));
     return true;

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <title>Redirect unavailable · NerdVPN</title>
+  <link rel="stylesheet" href="redirect-error.css">
+  <script src="redirect-error.js" defer></script>
+</head>
+<body>
+  <main id="recovery" class="recovery" aria-labelledby="failure-title" aria-busy="true">
+    <div class="brand"><span class="brand-dot" aria-hidden="true"></span>NerdVPN</div>
+
+    <div class="status-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" role="img">
+        <circle cx="12" cy="12" r="9"></circle>
+        <path d="M12 7.5v5.75"></path>
+        <circle class="status-icon-dot" cx="12" cy="16.5" r="0.75"></circle>
+      </svg>
+    </div>
+
+    <h1 id="failure-title" tabindex="-1">The alternate site didn’t respond</h1>
+    <p id="failure-description" class="description">NerdVPN is loading recovery options.</p>
+
+    <div id="failure-actions" class="actions">
+      <button id="open-original" class="primary-action" type="button">Go to original</button>
+      <button id="retry-alternate" class="secondary-action" type="button">Try again</button>
+    </div>
+
+    <p id="scope-label" class="scope"></p>
+    <p id="error-message" class="error-message" role="alert" hidden></p>
+  </main>
+</body>
+</html>
