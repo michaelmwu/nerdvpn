@@ -1,4 +1,5 @@
 importScripts('redirect-utils.js');
+importScripts('x_history_redirect.js');
 
 const {
   buildBypassRule,

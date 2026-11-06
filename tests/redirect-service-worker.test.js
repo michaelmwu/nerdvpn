@@ -66,6 +66,7 @@ globalThis.chrome = {
     onBeforeNavigate: event('beforeNavigate'),
     onCommitted: event('committed'),
     onErrorOccurred: event('navigationError'),
+    onHistoryStateUpdated: event('historyState'),
   },
 };
 
