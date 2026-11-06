@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const listeners = {};
 const sessionStorage = {};
 let sessionRules = [];
+let storedPaywallHosts;
 const tabUpdates = [];
 const redirectErrorUrl = 'chrome-extension://test/redirect-error.html';
 
@@ -44,6 +45,13 @@ globalThis.chrome = {
       },
       async set(values) {
         Object.assign(sessionStorage, structuredClone(values));
+      },
+    },
+    sync: {
+      async get(key) {
+        return storedPaywallHosts === undefined
+          ? {}
+          : { [key]: structuredClone(storedPaywallHosts) };
       },
     },
   },
@@ -326,4 +334,85 @@ test('leaves cancelled and certificate-error navigations to Chrome', async () =>
   assert.deepEqual(tabUpdates.slice(updateStart), []);
   listeners.tabRemoved(tabId);
   await waitForAsyncListeners();
+});
+
+test('a NYT newsletter redirect bypasses the configured site across subdomains', async () => {
+  const tabId = 255;
+  const originalUrl = 'https://nl.nytimes.com/f/newsletter/example-token?source=email';
+  const archiveUrl = `https://archive.is/${originalUrl}`;
+
+  listeners.beforeNavigate({ frameId: 0, tabId, timeStamp: 6_000, url: originalUrl });
+  listeners.committed({ frameId: 0, tabId, timeStamp: 6_100, url: archiveUrl });
+  await waitForAsyncListeners();
+
+  assert.deepEqual(await sendMessage({
+    type: 'getRedirectNotice',
+    currentUrl: archiveUrl,
+  }, tabId), {
+    notice: {
+      originalLabel: 'nl.nytimes.com',
+      alternateLabel: 'archive.is',
+      actionLabel: 'Go to original',
+      actionAriaLabel: 'Go to nl.nytimes.com in this tab',
+    },
+  });
+
+  assert.deepEqual(await sendMessage({
+    type: 'bypassRedirect',
+    currentUrl: archiveUrl,
+  }, tabId), { ok: true });
+  assert.deepEqual(sessionRules.at(-1).condition.requestDomains, ['nytimes.com']);
+  assert.deepEqual(tabUpdates.at(-1), { tabId, update: { url: originalUrl } });
+
+  listeners.tabRemoved(tabId);
+  await waitForAsyncListeners();
+});
+
+test('a custom paywall site gets archive failure recovery and a site-wide tab bypass', async () => {
+  const tabId = 256;
+  const originalUrl = 'https://news.latimes.com/story/example?source=email';
+  const archiveUrl = `https://archive.is/${originalUrl}`;
+  storedPaywallHosts = ['latimes.com'];
+
+  listeners.beforeNavigate({ frameId: 0, tabId, timeStamp: 7_000, url: originalUrl });
+  listeners.beforeNavigate({ frameId: 0, tabId, timeStamp: 7_100, url: archiveUrl });
+  await waitForAsyncListeners();
+  listeners.navigationError({
+    error: 'net::ERR_CONNECTION_TIMED_OUT',
+    frameId: 0,
+    tabId,
+    timeStamp: 7_200,
+    url: archiveUrl,
+  });
+  await waitForAsyncListeners();
+
+  assert.deepEqual(tabUpdates.at(-1), {
+    tabId,
+    update: { url: redirectErrorUrl },
+  });
+  assert.deepEqual(await sendMessage({
+    type: 'getRedirectFailure',
+    currentUrl: redirectErrorUrl,
+  }, tabId), {
+    failure: {
+      title: 'archive.is didn’t respond',
+      description: 'archive.is took too long to respond.',
+      actionLabel: 'Go to original',
+      actionAriaLabel: 'Go to news.latimes.com in this tab',
+      retryLabel: 'Try again',
+      retryAriaLabel: 'Try archive.is again',
+      scopeLabel: 'This tab will use latimes.com until you close it.',
+    },
+  });
+
+  assert.deepEqual(await sendMessage({
+    type: 'bypassFailedRedirect',
+    currentUrl: redirectErrorUrl,
+  }, tabId), { ok: true });
+  assert.deepEqual(sessionRules.at(-1).condition.requestDomains, ['latimes.com']);
+  assert.deepEqual(tabUpdates.at(-1), { tabId, update: { url: originalUrl } });
+
+  listeners.tabRemoved(tabId);
+  await waitForAsyncListeners();
+  storedPaywallHosts = undefined;
 });

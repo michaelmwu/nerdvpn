@@ -6,6 +6,7 @@ const {
   destinationMatches,
   matchRedirect,
   originalUrlForDestination,
+  paywallSiteForHost,
 } = globalThis.NerdVpnRedirects;
 
 const ACTIVE_REDIRECT_KEY_PREFIX = 'activeRedirect:';
@@ -138,6 +139,22 @@ async function getRedirectNotice(tabId, currentUrl) {
   };
 }
 
+async function archiveBypassDomain(record) {
+  const originalHost = new URL(record.originalUrl).hostname;
+  let customSites = [];
+
+  try {
+    const stored = await chrome.storage.sync.get('userPaywallHosts');
+    if (Array.isArray(stored.userPaywallHosts)) {
+      customSites = stored.userPaywallHosts;
+    }
+  } catch (error) {
+    console.warn('NerdVPN could not read custom paywall sites.', error);
+  }
+
+  return paywallSiteForHost(originalHost, customSites);
+}
+
 async function openOriginalInTab(tabId, record, destinationUrl) {
   const originalUrl = originalUrlForDestination(record, destinationUrl);
   if (!originalUrl) {
@@ -148,7 +165,10 @@ async function openOriginalInTab(tabId, record, destinationUrl) {
   const sessionRules = await chrome.declarativeNetRequest.getSessionRules();
   const existingRule = sessionRules.find((rule) => rule.id === ruleId);
   const existingDomains = existingRule?.condition?.requestDomains ?? [];
-  const bypassRule = buildBypassRule(tabId, record.allowDomains, existingDomains);
+  const allowDomains = record.kind === 'archive'
+    ? [await archiveBypassDomain(record)]
+    : record.allowDomains;
+  const bypassRule = buildBypassRule(tabId, allowDomains, existingDomains);
 
   await chrome.declarativeNetRequest.updateSessionRules({
     removeRuleIds: [ruleId],
@@ -184,6 +204,10 @@ async function getRedirectFailure(tabId, currentUrl) {
     return null;
   }
 
+  const scopeName = record.kind === 'archive'
+    ? await archiveBypassDomain(record)
+    : record.originalLabel;
+
   return {
     title: `${record.alternateLabel} didn’t respond`,
     description: failureDescription(record),
@@ -191,7 +215,7 @@ async function getRedirectFailure(tabId, currentUrl) {
     actionAriaLabel: `Go to ${record.originalLabel} in this tab`,
     retryLabel: 'Try again',
     retryAriaLabel: `Try ${record.alternateLabel} again`,
-    scopeLabel: `This tab will use ${record.originalLabel} until you close it.`,
+    scopeLabel: `This tab will use ${scopeName} until you close it.`,
   };
 }
 
