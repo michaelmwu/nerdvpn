@@ -2,7 +2,7 @@
 
 Chrome extension that redirects visits to specific domains:
 
-- `x.com` → `xcancel.com` (allows logged out X browsing)
+- `x.com` → `nitter.cf` (allows logged out X browsing)
 - `reddit.com` → `reddit.nerdvpn.de` (makes Reddit work again on VPNs)
 - Paywalled news sites (e.g., nytimes.com, washingtonpost.com, wsj.com, ft.com, economist.com, bloomberg.com, wired.com) → archive.is snapshots (add your own domains in the popup)
 
